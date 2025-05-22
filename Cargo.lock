@@ -238,6 +238,8 @@ dependencies = [
  "axum",
  "clap",
  "jemallocator",
+ "serde",
+ "serde_json",
  "tokio",
  "tokio-util",
  "tracing",

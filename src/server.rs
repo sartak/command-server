@@ -6,6 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+use serde::Serialize;
 use std::sync::Arc;
 use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
@@ -63,6 +64,11 @@ async fn root_get() -> Response {
     Json("Hello from command-server!").into_response()
 }
 
+#[derive(Serialize)]
+struct StatusResponse {
+    output: String,
+}
+
 async fn status_get(State(server): State<Arc<Server>>) -> Response {
     let output = Command::new("sh")
         .arg("-c")
@@ -90,7 +96,18 @@ async fn status_get(State(server): State<Arc<Server>>) -> Response {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    output.stdout.into_response()
+    let output = match String::from_utf8(output.stdout) {
+        Ok(o) => o,
+        Err(e) => {
+            error!(
+                "Failed to convert output of status command '{}' to UTF-8: {:?}",
+                server.status_command, e
+            );
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    Json(StatusResponse { output }).into_response()
 }
 
 async fn run_post(State(server): State<Arc<Server>>) -> Response {

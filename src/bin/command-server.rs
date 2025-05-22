@@ -1,3 +1,4 @@
+use anyhow::Result;
 use clap::Parser;
 
 #[derive(Parser, Debug)]
@@ -15,7 +16,7 @@ struct Args {
     port: u16,
 }
 
-fn main() {
+fn main() -> Result<()> {
     let Args {
         start_command,
         stop_command,
@@ -23,4 +24,6 @@ fn main() {
         port,
     } = Args::parse();
     dbg!(start_command, stop_command, status_command, port);
+
+    Ok(())
 }

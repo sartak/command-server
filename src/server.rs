@@ -18,19 +18,26 @@ use tracing::{error, info, warn};
 pub struct ServerPre {
     run_command: String,
     status_command: String,
+    after_stop_command: Option<String>,
 }
 
 pub struct Server {
     run_command: String,
     status_command: String,
+    after_stop_command: Option<String>,
 
     child: Mutex<Option<Child>>,
 }
 
-pub fn prepare(run_command: String, status_command: String) -> ServerPre {
+pub fn prepare(
+    run_command: String,
+    status_command: String,
+    after_stop_command: Option<String>,
+) -> ServerPre {
     ServerPre {
         run_command,
         status_command,
+        after_stop_command,
     }
 }
 
@@ -43,6 +50,7 @@ impl ServerPre {
         let server = Server {
             run_command: self.run_command,
             status_command: self.status_command,
+            after_stop_command: self.after_stop_command,
             child: Mutex::new(None),
         };
 
@@ -161,7 +169,32 @@ async fn stop_post(State(server): State<Arc<Server>>) -> Response {
                 error!("Failed to wait for command: {:?}", e);
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
+
             *lock = None;
+
+            if let Some(command) = server.after_stop_command.as_ref() {
+                let output = Command::new("sh").arg("-c").arg(command).output().await;
+
+                let output = match output {
+                    Ok(o) => o,
+                    Err(e) => {
+                        error!("Failed to run after-stop command '{}': {:?}", command, e);
+                        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    }
+                };
+
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    error!(
+                        "After-stop command '{}' failed {}: {}",
+                        command, output.status, stderr
+                    );
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            }
+
+            drop(lock);
+
             StatusCode::OK.into_response()
         }
         None => {

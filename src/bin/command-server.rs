@@ -1,5 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
+use command_server::server;
+use std::net::{Ipv4Addr, TcpListener};
 use tokio::{select, signal};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
@@ -37,22 +39,20 @@ async fn main() -> Result<()> {
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
+    let listener = TcpListener::bind((Ipv4Addr::new(0, 0, 0, 0), port))?;
+    listener.set_nonblocking(true)?;
+
     let shutdown = shutdown_signal().await;
+
+    let server = server::prepare(start_command, stop_command, status_command);
+    let server = server.start(listener, shutdown);
 
     info!(
         monotonic_counter.launched = 1,
         "{} started", "command-server"
     );
 
-    let res = select!(
-        _ = async {
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-        } => Ok(()),
-        _ = async {
-            shutdown.cancelled().await;
-        } => Ok(()),
-    )
-    .map(|_| ());
+    let res = server.await;
 
     if let Err(e) = &res {
         error!("main shutting down with error: {e:?}");

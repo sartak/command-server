@@ -2,12 +2,14 @@ use anyhow::Result;
 use axum::{
     Json, Router,
     extract::State,
+    http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
 };
 use std::sync::Arc;
+use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{error, info};
 
 pub struct ServerPre {
     run_command: String,
@@ -62,7 +64,33 @@ async fn root_get() -> Response {
 }
 
 async fn status_get(State(server): State<Arc<Server>>) -> Response {
-    server.status_command.clone().into_response()
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(&server.status_command)
+        .output()
+        .await;
+
+    let output = match output {
+        Ok(o) => o,
+        Err(e) => {
+            error!(
+                "Failed to run status command '{}': {:?}",
+                server.status_command, e
+            );
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        error!(
+            "Status command '{}' failed {}: {}",
+            server.status_command, output.status, stderr
+        );
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    output.stdout.into_response()
 }
 
 async fn run_post(State(server): State<Arc<Server>>) -> Response {

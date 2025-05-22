@@ -149,5 +149,24 @@ async fn run_post(State(server): State<Arc<Server>>) -> Response {
 }
 
 async fn stop_post(State(server): State<Arc<Server>>) -> Response {
-    ().into_response()
+    let mut lock = server.child.lock().await;
+
+    match *lock {
+        Some(ref mut child) => {
+            if let Err(e) = child.kill().await {
+                error!("Failed to kill command: {:?}", e);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+            if let Err(e) = child.wait().await {
+                error!("Failed to wait for command: {:?}", e);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+            *lock = None;
+            StatusCode::OK.into_response()
+        }
+        None => {
+            warn!("Cannot stop command, not running");
+            StatusCode::CONFLICT.into_response()
+        }
+    }
 }

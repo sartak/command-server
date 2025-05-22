@@ -1,6 +1,9 @@
 use anyhow::Result;
 use clap::Parser;
 
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 #[derive(Parser, Debug)]
 struct Args {
     #[arg(long)]

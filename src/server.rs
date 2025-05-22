@@ -10,21 +10,18 @@ use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 pub struct ServerPre {
-    start_command: String,
-    stop_command: String,
+    run_command: String,
     status_command: String,
 }
 
 pub struct Server {
-    start_command: String,
-    stop_command: String,
+    run_command: String,
     status_command: String,
 }
 
-pub fn prepare(start_command: String, stop_command: String, status_command: String) -> ServerPre {
+pub fn prepare(run_command: String, status_command: String) -> ServerPre {
     ServerPre {
-        start_command,
-        stop_command,
+        run_command,
         status_command,
     }
 }
@@ -36,8 +33,7 @@ impl ServerPre {
         shutdown: CancellationToken,
     ) -> Result<()> {
         let server = Server {
-            start_command: self.start_command,
-            stop_command: self.stop_command,
+            run_command: self.run_command,
             status_command: self.status_command,
         };
 
@@ -56,7 +52,7 @@ fn router(server: Server) -> Router {
     Router::new()
         .route("/", get(root_get))
         .route("/status", get(status_get))
-        .route("/start", post(start_post))
+        .route("/run", post(run_post))
         .route("/stop", post(stop_post))
         .with_state(Arc::new(server))
 }
@@ -69,10 +65,10 @@ async fn status_get(State(server): State<Arc<Server>>) -> Response {
     server.status_command.clone().into_response()
 }
 
-async fn start_post(State(server): State<Arc<Server>>) -> Response {
-    server.start_command.clone().into_response()
+async fn run_post(State(server): State<Arc<Server>>) -> Response {
+    server.run_command.clone().into_response()
 }
 
 async fn stop_post(State(server): State<Arc<Server>>) -> Response {
-    server.stop_command.clone().into_response()
+    ().into_response()
 }

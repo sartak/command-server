@@ -13,10 +13,7 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 #[derive(Parser, Debug)]
 struct Args {
     #[arg(long)]
-    start_command: String,
-
-    #[arg(long)]
-    stop_command: String,
+    run_command: String,
 
     #[arg(long)]
     status_command: String,
@@ -28,8 +25,7 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<()> {
     let Args {
-        start_command,
-        stop_command,
+        run_command,
         status_command,
         port,
     } = Args::parse();
@@ -44,7 +40,7 @@ async fn main() -> Result<()> {
 
     let shutdown = shutdown_signal().await;
 
-    let server = server::prepare(start_command, stop_command, status_command);
+    let server = server::prepare(run_command, status_command);
     let server = server.start(listener, shutdown);
 
     info!(

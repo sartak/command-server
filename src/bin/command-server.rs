@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use command_server::server;
-use std::net::{Ipv4Addr, TcpListener};
+use std::net::TcpListener;
 use tokio::{select, signal};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
@@ -22,7 +22,7 @@ struct Args {
     after_stop_command: Option<String>,
 
     #[arg(long)]
-    port: u16,
+    listen: String,
 }
 
 #[tokio::main]
@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
         run_command,
         status_command,
         after_stop_command,
-        port,
+        listen,
     } = Args::parse();
 
     tracing_subscriber::registry()
@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let listener = TcpListener::bind((Ipv4Addr::new(0, 0, 0, 0), port))?;
+    let listener = TcpListener::bind(listen)?;
     listener.set_nonblocking(true)?;
 
     let shutdown = shutdown_signal().await;

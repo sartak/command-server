@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::Parser;
-use tracing::{error, info};
+use tokio::{select, signal};
+use tokio_util::sync::CancellationToken;
+use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[global_allocator]
@@ -21,7 +23,8 @@ struct Args {
     port: u16,
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let Args {
         start_command,
         stop_command,
@@ -34,12 +37,22 @@ fn main() -> Result<()> {
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
+    let shutdown = shutdown_signal().await;
+
     info!(
         monotonic_counter.launched = 1,
         "{} started", "command-server"
     );
 
-    let res = Ok(());
+    let res = select!(
+        _ = async {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        } => Ok(()),
+        _ = async {
+            shutdown.cancelled().await;
+        } => Ok(()),
+    )
+    .map(|_| ());
 
     if let Err(e) = &res {
         error!("main shutting down with error: {e:?}");
@@ -48,4 +61,30 @@ fn main() -> Result<()> {
     }
 
     res
+}
+
+async fn shutdown_signal() -> CancellationToken {
+    let token = CancellationToken::new();
+
+    {
+        let token = token.clone();
+        tokio::spawn(async move {
+            let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate()).unwrap();
+            select!(
+                _ = signal::ctrl_c() => info!(monotonic_counter.shutdown = 1, method = "ctrl-c", "Got interrupt signal, shutting down"),
+                _ = sigterm.recv() => info!(monotonic_counter.shutdown = 1, method = "sigterm", "Got sigterm, shutting down"),
+            );
+
+            token.cancel();
+
+            select!(
+                _ = signal::ctrl_c() => {},
+                _ = sigterm.recv() => {},
+            );
+            warn!("Received multiple shutdown signals, exiting now");
+            std::process::exit(1);
+        });
+    }
+
+    token
 }

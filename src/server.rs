@@ -72,10 +72,14 @@ async fn root_get() -> Response {
 
 #[derive(Serialize)]
 struct StatusResponse {
+    running: bool,
     output: String,
 }
 
 async fn status_get(State(server): State<Arc<Server>>) -> Response {
+    let lock = server.child.lock().await;
+    let running = lock.is_some();
+
     let output = Command::new("sh")
         .arg("-c")
         .arg(&server.status_command)
@@ -113,7 +117,9 @@ async fn status_get(State(server): State<Arc<Server>>) -> Response {
         }
     };
 
-    Json(StatusResponse { output }).into_response()
+    drop(lock);
+
+    Json(StatusResponse { running, output }).into_response()
 }
 
 async fn run_post(State(server): State<Arc<Server>>) -> Response {

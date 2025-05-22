@@ -8,9 +8,12 @@ use axum::{
 };
 use serde::Serialize;
 use std::sync::Arc;
-use tokio::process::Command;
+use tokio::{
+    process::{Child, Command},
+    sync::Mutex,
+};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 pub struct ServerPre {
     run_command: String,
@@ -20,6 +23,8 @@ pub struct ServerPre {
 pub struct Server {
     run_command: String,
     status_command: String,
+
+    child: Mutex<Option<Child>>,
 }
 
 pub fn prepare(run_command: String, status_command: String) -> ServerPre {
@@ -38,6 +43,7 @@ impl ServerPre {
         let server = Server {
             run_command: self.run_command,
             status_command: self.status_command,
+            child: Mutex::new(None),
         };
 
         let address = listener.local_addr()?;
@@ -111,7 +117,29 @@ async fn status_get(State(server): State<Arc<Server>>) -> Response {
 }
 
 async fn run_post(State(server): State<Arc<Server>>) -> Response {
-    server.run_command.clone().into_response()
+    let mut lock = server.child.lock().await;
+
+    if lock.is_some() {
+        warn!("Cannot start command, already running");
+        return StatusCode::CONFLICT.into_response();
+    }
+
+    let child = Command::new("sh")
+        .arg("-c")
+        .arg(&server.run_command)
+        .spawn();
+
+    let child = match child {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Failed to run command '{}': {:?}", server.run_command, e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    *lock = Some(child);
+
+    StatusCode::OK.into_response()
 }
 
 async fn stop_post(State(server): State<Arc<Server>>) -> Response {

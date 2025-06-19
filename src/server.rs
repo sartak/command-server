@@ -18,12 +18,14 @@ use tracing::{error, info, warn};
 pub struct ServerPre {
     run_command: String,
     status_command: String,
+    before_stop_command: Option<String>,
     after_stop_command: Option<String>,
 }
 
 pub struct Server {
     run_command: String,
     status_command: String,
+    before_stop_command: Option<String>,
     after_stop_command: Option<String>,
 
     child: Mutex<Option<Child>>,
@@ -32,11 +34,13 @@ pub struct Server {
 pub fn prepare(
     run_command: String,
     status_command: String,
+    before_stop_command: Option<String>,
     after_stop_command: Option<String>,
 ) -> ServerPre {
     ServerPre {
         run_command,
         status_command,
+        before_stop_command,
         after_stop_command,
     }
 }
@@ -50,6 +54,7 @@ impl ServerPre {
         let server = Server {
             run_command: self.run_command,
             status_command: self.status_command,
+            before_stop_command: self.before_stop_command,
             after_stop_command: self.after_stop_command,
             child: Mutex::new(None),
         };
@@ -161,6 +166,27 @@ async fn stop_post(State(server): State<Arc<Server>>) -> Response {
 
     match *lock {
         Some(ref mut child) => {
+            if let Some(command) = server.before_stop_command.as_ref() {
+                let output = Command::new("sh").arg("-c").arg(command).output().await;
+
+                let output = match output {
+                    Ok(o) => o,
+                    Err(e) => {
+                        error!("Failed to run before-stop command '{}': {:?}", command, e);
+                        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    }
+                };
+
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    error!(
+                        "before-stop command '{}' failed {}: {}",
+                        command, output.status, stderr
+                    );
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            }
+
             if let Err(e) = child.kill().await {
                 error!("Failed to kill command: {:?}", e);
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
@@ -186,7 +212,7 @@ async fn stop_post(State(server): State<Arc<Server>>) -> Response {
                 if !output.status.success() {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     error!(
-                        "After-stop command '{}' failed {}: {}",
+                        "after-stop command '{}' failed {}: {}",
                         command, output.status, stderr
                     );
                     return StatusCode::INTERNAL_SERVER_ERROR.into_response();

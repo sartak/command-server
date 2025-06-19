@@ -19,6 +19,9 @@ struct Args {
     status_command: String,
 
     #[arg(long)]
+    before_stop_command: Option<String>,
+
+    #[arg(long)]
     after_stop_command: Option<String>,
 
     #[arg(long)]
@@ -30,6 +33,7 @@ async fn main() -> Result<()> {
     let Args {
         run_command,
         status_command,
+        before_stop_command,
         after_stop_command,
         listen,
     } = Args::parse();
@@ -44,7 +48,12 @@ async fn main() -> Result<()> {
 
     let shutdown = shutdown_signal().await;
 
-    let server = server::prepare(run_command, status_command, after_stop_command);
+    let server = server::prepare(
+        run_command,
+        status_command,
+        before_stop_command,
+        after_stop_command,
+    );
     let server = server.start(listener, shutdown);
 
     info!(

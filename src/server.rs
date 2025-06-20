@@ -177,13 +177,29 @@ async fn stop_post(State(server): State<Arc<Server>>) -> Response {
                     }
                 };
 
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+
                 if !output.status.success() {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
                     error!(
                         "before-stop command '{}' failed {}: {}",
                         command, output.status, stderr
                     );
                     return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+
+                if !stderr.is_empty() {
+                    warn!(
+                        "before-stop command '{}' produced stderr: {}",
+                        command, stderr
+                    );
+                }
+
+                if !stdout.is_empty() {
+                    warn!(
+                        "before-stop command '{}' produced stdout: {}",
+                        command, stdout
+                    );
                 }
             }
 
@@ -209,13 +225,29 @@ async fn stop_post(State(server): State<Arc<Server>>) -> Response {
                     }
                 };
 
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+
                 if !output.status.success() {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
                     error!(
                         "after-stop command '{}' failed {}: {}",
                         command, output.status, stderr
                     );
                     return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+
+                if !stderr.is_empty() {
+                    warn!(
+                        "after-stop command '{}' produced stderr: {}",
+                        command, stderr
+                    );
+                }
+
+                if !stdout.is_empty() {
+                    warn!(
+                        "after-stop command '{}' produced stdout: {}",
+                        command, stdout
+                    );
                 }
             }
 
